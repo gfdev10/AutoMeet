@@ -1,87 +1,114 @@
+from __future__ import annotations
+
 import argparse
-import os
+import logging
 import subprocess
 import sys
 import time
-from playwright.sync_api import sync_playwright
+from pathlib import Path
+from playwright.sync_api import sync_playwright, TimeoutError as PlaywrightTimeout
 
-# Directorio local para guardar la sesión del usuario que ejecute el script
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
-USER_DATA_DIR = os.path.join(BASE_DIR, "user_data")
+# ---------------------------------------------------------------------------
+# Configuración general
+# ---------------------------------------------------------------------------
+BASE_DIR = Path(__file__).resolve().parent
+USER_DATA_DIR = BASE_DIR / "user_data"
+DEFAULT_MEET_URL = "https://meet.google.com/iqa-uqhn-wzg"
+TIMEOUT_NAVEGACION = 30_000
+TIMEOUT_BOTON = 10_000
+DELAY_POST_CARGA = 3
+DELAY_ATAJO = 0.5
+DELAY_CLICK_FOCO = 1
+DELAY_ATAJO_POST_FOCO = 0.5
+
+SELECTORES_UNION = (
+    'button:has-text("Unirse ahora")',
+    'button:has-text("Solicitar unirse")',
+    'button:has-text("Join now")',
+    'button:has-text("Ask to join")',
+)
+
+SELECTORES_MIC_APAGADO = (
+    '[aria-label="Desactivar micrófono"]',
+    '[aria-label="Turn off microphone"]',
+    '[aria-label="Micrófono activado"]',
+    '[aria-label="Microphone is on"]',
+)
+
+SELECTORES_CAM_APAGADO = (
+    '[aria-label="Desactivar cámara"]',
+    '[aria-label="Turn off camera"]',
+    '[aria-label="Cámara activada"]',
+    '[aria-label="Camera is on"]',
+)
+
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [%(levelname)s] %(message)s",
+    datefmt="%H:%M:%S",
+)
+logger = logging.getLogger(__name__)
 
 
-def asegurar_instalacion_playwright():
-    """Garantiza que el navegador Chromium esté instalado en la máquina objetivo."""
+# ---------------------------------------------------------------------------
+# Helpers
+# ---------------------------------------------------------------------------
+def asegurar_playwright() -> None:
+    """Instala Chromium si no está presente."""
+    logger.info("Verificando binarios de Playwright / Chromium...")
     try:
         subprocess.run(
             [sys.executable, "-m", "playwright", "install", "chromium"],
             check=True,
-            stdout=subprocess.DEVNULL,
-            stderr=subprocess.DEVNULL,
         )
-    except Exception as e:
-        print(f"Aviso al verificar binarios de Playwright: {e}")
+    except subprocess.CalledProcessError as exc:
+        logger.warning("No se pudo verificar la instalación de Playwright: %s", exc)
 
 
-def desactivar_mic_camara(page):
-    """Intenta desactivar micrófono y cámara por atajo de teclado, con fallback por selectores."""
-    print("Intentando desactivar micrófono y cámara...")
+def _clickear_si_existe(page: "Page", selectores: tuple[str, ...], nombre: str) -> None:
+    """Busca el primer selector visible y hace clic."""
+    for selector in selectores:
+        loc = page.locator(selector)
+        if loc.count() > 0:
+            try:
+                loc.first.click()
+                logger.info("%s desactivado/a.", nombre)
+                return
+            except Exception as exc:
+                logger.debug("Fallo al clicar %s: %s", selector, exc)
+
+
+def desactivar_mic_y_camara(page: "Page") -> None:
+    """Desactiva micrófono y cámara por atajo de teclado con fallback por UI."""
+    logger.info("Desactivando micrófono y cámara...")
 
     try:
         page.bring_to_front()
-        time.sleep(0.5)
+        time.sleep(DELAY_CLICK_FOCO)
 
         page.keyboard.press("ControlOrMeta+d")
-        time.sleep(0.5)
+        time.sleep(DELAY_ATAJO_POST_FOCO)
         page.keyboard.press("ControlOrMeta+e")
-        time.sleep(0.5)
+        time.sleep(DELAY_ATAJO_POST_FOCO)
 
-        print("Atajos de teclado enviados.")
-    except Exception as e:
-        print(f"Aviso: no se pudieron enviar los atajos de teclado: {e}")
+        logger.info("Atajos de teclado enviados.")
+    except Exception as exc:
+        logger.warning("No se pudieron enviar atajos de teclado: %s", exc)
 
-    selectores_mic = (
-        '[aria-label="Desactivar micrófono"], '
-        '[aria-label="Turn off microphone"], '
-        '[aria-label="Micrófono activado"], '
-        '[aria-label="Microphone is on"]'
-    )
-    selectores_cam = (
-        '[aria-label="Desactivar cámara"], '
-        '[aria-label="Turn off camera"], '
-        '[aria-label="Cámara activada"], '
-        '[aria-label="Camera is on"]'
-    )
-
-    for selector in selectores_mic.split(", "):
-        btn = page.locator(selector)
-        if btn.count() > 0:
-            try:
-                btn.first.click()
-                print("Micrófono desactivado.")
-                break
-            except Exception:
-                pass
-
-    for selector in selectores_cam.split(", "):
-        btn = page.locator(selector)
-        if btn.count() > 0:
-            try:
-                btn.first.click()
-                print("Cámara desactivada.")
-                break
-            except Exception:
-                pass
+    _clickear_si_existe(page, SELECTORES_MIC_APAGADO, "Micrófono")
+    _clickear_si_existe(page, SELECTORES_CAM_APAGADO, "Cámara")
 
 
-def entrar_a_meet(url: str):
-    asegurar_instalacion_playwright()
+# ---------------------------------------------------------------------------
+# Flujo principal
+# ---------------------------------------------------------------------------
+def unirse_a_reunion(url: str) -> None:
+    asegurar_playwright()
 
-    with sync_playwright() as p:
-        print("Lanzando navegador...")
-
-        context = p.chromium.launch_persistent_context(
-            user_data_dir=USER_DATA_DIR,
+    with sync_playwright() as playwright:
+        logger.info("Lanzando navegador...")
+        context = playwright.chromium.launch_persistent_context(
+            user_data_dir=str(USER_DATA_DIR),
             headless=False,
             args=[
                 "--use-fake-ui-for-media-stream",
@@ -92,57 +119,66 @@ def entrar_a_meet(url: str):
 
         page = context.pages[0] if context.pages else context.new_page()
 
-        print(f"Navegando a {url}...")
+        logger.info("Navegando a %s...", url)
         page.goto(url)
 
         try:
-            page.wait_for_url("https://meet.google.com/*", timeout=30000)
-            print("Página cargada con éxito.")
+            logger.info("Esperando carga de Meet...")
+            page.wait_for_url("https://meet.google.com/*", timeout=TIMEOUT_NAVEGACION)
+            logger.info("Página de Meet cargada.")
 
-            time.sleep(3)
+            time.sleep(DELAY_POST_CARGA)
+            desactivar_mic_y_camara(page)
 
-            desactivar_mic_camara(page)
-
-            selector_unirse = (
-                'button:has-text("Unirse ahora"), '
-                'button:has-text("Solicitar unirse"), '
-                'button:has-text("Join now"), '
-                'button:has-text("Ask to join")'
+            logger.info("Buscando botón de unión...")
+            boton = page.wait_for_selector(
+                ", ".join(SELECTORES_UNION), timeout=TIMEOUT_BOTON
             )
 
-            print("Buscando botón para ingresar...")
-            btn = page.wait_for_selector(selector_unirse, timeout=10000)
-
-            if btn and btn.is_visible():
-                btn.click()
-                print("¡Unido a la reunión correctamente!")
+            if boton and boton.is_visible():
+                boton.click()
+                logger.info("¡Unido a la reunión correctamente!")
             else:
-                print(
-                    "No se encontró el botón de unión directa. Verifica si requerís iniciar sesión."
+                logger.warning(
+                    "No se encontró botón de unión directa. "
+                    "Verificá si hace falta iniciar sesión."
                 )
 
-        except Exception as e:
-            print(f"Estado de la ejecución: {e}")
+        except PlaywrightTimeout:
+            logger.error("Timeout esperando elementos de Meet.")
+        except Exception as exc:
+            logger.error("Error en la ejecución: %s", exc)
 
-        print("\nReunión activa. Presioná Ctrl+C para finalizar.")
+        logger.info("Reunión activa. Presioná Ctrl+C para finalizar.")
         try:
             while True:
                 time.sleep(1)
         except KeyboardInterrupt:
-            print("Cerrando sesión...")
+            logger.info("Cerrando sesión...")
+        finally:
             context.close()
 
 
-if __name__ == "__main__":
+# ---------------------------------------------------------------------------
+# CLI
+# ---------------------------------------------------------------------------
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(
-        description="Bot automatizado para unirse a llamadas de Google Meet."
+        description="Bot automatizado para unirse a llamadas de Google Meet.",
     )
     parser.add_argument(
         "--url",
         type=str,
-        default="https://meet.google.com/iqa-uqhn-wzg",
+        default=DEFAULT_MEET_URL,
         help="Enlace completo de la reunión de Google Meet.",
     )
+    return parser
 
-    args = parser.parse_args()
-    entrar_a_meet(args.url)
+
+def main() -> None:
+    args = build_parser().parse_args()
+    unirse_a_reunion(args.url)
+
+
+if __name__ == "__main__":
+    main()
