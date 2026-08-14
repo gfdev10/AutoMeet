@@ -1,64 +1,64 @@
 # AutoMeet
 
-Automated bot to join Google Meet calls using Playwright. Automatically installs Chromium, mutes microphone and camera, and maintains a persistent browser session.
+Bot automatizado para unirse a llamadas de Google Meet utilizando Playwright. Instala Chromium automáticamente, silencia micrófono y cámara, y mantiene la sesión del navegador de forma persistente.
 
-## Requirements
+## Requisitos
 
-- Python 3.10+
+- Python 3.10 o superior
 - pip
-- Internet connection
+- Conexión a internet
 
-## Installation
+## Instalación
 
 ```bash
 git clone <https://github.com/gfdev10/AutoMeet>
 cd AutoMeet
 
 python -m venv venv
-venv\Scripts\activate  # Windows
-# source venv/bin/activate  # Linux/macOS
+venv\Scripts\activate  # En Windows
+# source venv/bin/activate  # En Linux/macOS
 
 pip install -r requirements.txt
 ```
 
-## Usage
+## Uso
 
 ```bash
 python main.py --url https://meet.google.com/abc-defg-hij
 ```
 
-Omitting `--url` uses the default URL defined in the script.
+Si no pasas `--url`, se utiliza el link por defecto definido en el script.
 
-The script opens the browser, navigates to Meet, mutes mic/cam, and clicks the join button. Press `Ctrl+C` to end the session.
+El script abre el navegador, navega al Meet, silencia micrófono y cámara, y busca el botón de unión. Para cerrar la reunión, presioná `Ctrl+C`.
 
-## Features
+## Características
 
-- **Automatic Chromium installation**: runs `playwright install chromium` on first execution.
-- **Persistent user profile**: saves session data in `user_data/` (ignored by Git).
-- **Mic/cam mute**: sends keyboard shortcuts (`ControlOrMeta+D`, `ControlOrMeta+E`) with a UI fallback.
-- **Multi-language selectors**: supports Spanish and English Meet interfaces.
-- **Configurable timeouts and delays**: all timing values are centralized as constants.
-- **Structured logging**: timestamped logs with severity levels instead of raw prints.
+- **Instalación automática de Chromium**: ejecuta `playwright install chromium` en la primera ejecución.
+- **Perfil de usuario persistente**: guarda la sesión en `user_data/` (ignorado por Git).
+- **Silenciar micrófono y cámara**: envía atajos de teclado (`ControlOrMeta+D`, `ControlOrMeta+E`) con fallback por interfaz gráfica.
+- **Selectores multilenguaje**: soporta interfaces de Meet en español e inglés.
+- **Configuración centralizada**: timeouts, demoras y selectores se definen como constantes al inicio del script.
+- **Logs estructurados**: mensajes con timestamp y nivel de severidad en lugar de prints simples.
 
-## Project Structure
+## Estructura del proyecto
 
 ```
 AutoMeet/
-├── main.py            # Entrypoint and core logic
-├── requirements.txt   # Dependencies
-├── .gitignore         # Ignores user_data/ and .env
-└── README.md          # This file
+├── main.py            # Entrypoint y lógica principal
+├── requirements.txt   # Dependencias
+├── .gitignore         # Ignora user_data/ y .env
+└── README.md          # Este archivo
 ```
 
-## Maintenance Notes
+## Notas de mantenimiento
 
-- Timeouts, delays, and selectors are defined as module-level constants at the top of `main.py`.
-- Core logic is split into small functions: `asegurar_playwright`, `desactivar_mic_y_camara`, `unirse_a_reunion`, `main`.
-- To add new features, extend the constants block or add new functions called from `unirse_a_reunion`.
-- CLI arguments are defined in `build_parser()` for easy extension.
+- Los timeouts, demoras y selectores están definidos como constantes en el bloque superior de `main.py`.
+- La lógica está dividida en funciones pequeñas: `asegurar_playwright`, `desactivar_mic_y_camara`, `_clickear_si_existe`, `unirse_a_reunion` y `main`.
+- Para agregar funcionalidades, extendé el bloque de constantes o creá una nueva función llamada desde `unirse_a_reunion`.
+- Los argumentos de CLI se definen en `build_parser()` para facilitar futuras extensiones.
 
-## Troubleshooting
+## Solución de problemas
 
-- If Chromium fails to install, run manually: `playwright install chromium`
-- If the join button is not found, ensure you are logged in or check the Meet URL format.
-- On Linux, you may need additional dependencies: `playwright install-deps`
+- Si Chromium no se instala automáticamente, ejecutá manualmente: `playwright install chromium`
+- Si no se encuentra el botón de unión, asegurate de haber iniciado sesión o revisá el formato del enlace de Meet.
+- En Linux puede que necesites dependencias adicionales: `playwright install-deps`
