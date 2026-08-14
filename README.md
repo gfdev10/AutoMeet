@@ -11,7 +11,7 @@ Bot automatizado para unirse a llamadas de Google Meet con Playwright. Instala C
 ## Instalación
 
 ```bash
-git clone <URL_DEL_REPO>
+git clone <https://github.com/gfdev10/AutoMeet>
 cd AutoMeet
 
 python -m venv venv
