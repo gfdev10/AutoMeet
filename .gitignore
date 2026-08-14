@@ -1,0 +1,14 @@
+# Sesión de Chrome / Playwright
+user_data/
+
+# Variables de entorno
+.env
+
+# Entornos virtuales de Python
+venv/
+.venv/
+env/
+
+# Archivos de caché de Python
+__pycache__/
+*.py[cod]
